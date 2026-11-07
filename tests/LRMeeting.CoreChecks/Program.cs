@@ -12,7 +12,9 @@ if(args.Contains("-of"))
     if(model.Contains("hang")){await Task.Delay(30000);return;}
     if(model.Contains("failure")){Console.Error.WriteLine("fixture failure");Environment.ExitCode=7;return;}
     var prefix=args[Array.IndexOf(args,"-of")+1];
-    File.WriteAllText(prefix+".json","""{"transcription":[{"offsets":{"from":500,"to":1200},"text":"  Acordamos revisar el presupuesto.  "}]}""");
+    var from=model.Contains("outside")?29000:model.Contains("invalid")?-1:500;
+    var to=model.Contains("padded")||model.Contains("outside")?30000:1200;
+    File.WriteAllText(prefix+".json",JsonSerializer.Serialize(new{transcription=new[]{new{offsets=new{from,to},text="  Acordamos revisar el presupuesto.  "}}}));
     return;
 }
 var temp=Path.Combine(Path.GetTempPath(),"lr-core-checks-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(temp);
@@ -47,6 +49,13 @@ try
     var whisper=new WhisperTranscriber();var chunk=new AudioChunk(fakeFile,0,0,2000);
     var recognized=await whisper.TranscribeAsync(chunk,settings,CancellationToken.None);
     Check(recognized.Single().StartMs==500&&recognized.Single().Text=="Acordamos revisar el presupuesto.","Whisper subprocess accepts spaced paths and parses timed JSON");
+    var paddedModel=Path.Combine(temp,"padded.bin");File.WriteAllText(paddedModel,"fixture");
+    var padded=await whisper.TranscribeAsync(chunk,settings with{WhisperModel=paddedModel},CancellationToken.None);
+    Check(padded.Single().EndMs==2000,"Whisper padded-window timestamps are clipped to the actual short audio");
+    var outsideModel=Path.Combine(temp,"outside.bin");File.WriteAllText(outsideModel,"fixture");
+    Check((await whisper.TranscribeAsync(chunk,settings with{WhisperModel=outsideModel},CancellationToken.None)).Count==0,"Whisper segments wholly inside padding are not stored");
+    var invalidModel=Path.Combine(temp,"invalid.bin");File.WriteAllText(invalidModel,"fixture");
+    await Throws<InvalidDataException>(()=>whisper.TranscribeAsync(chunk,settings with{WhisperModel=invalidModel},CancellationToken.None),"Whisper malformed negative timestamps remain errors");
     var failure=Path.Combine(temp,"failure.bin");File.WriteAllText(failure,"fixture");
     await Throws<IOException>(()=>whisper.TranscribeAsync(chunk,settings with{WhisperModel=failure},CancellationToken.None),"Whisper exit failure is visible");
     var hang=Path.Combine(temp,"hang.bin");File.WriteAllText(hang,"fixture");

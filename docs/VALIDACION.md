@@ -1,7 +1,7 @@
 # Validación 0.4.0
 - Compilación local cruzada: .NET SDK 10.0.403, cero errores y cero advertencias.
 - AudioChecks: 10 grupos; niveles PCM/float, rotación WAV sin pérdida de muestras, offsets, empaquetado, cancelación y conservación de originales.
-- CoreChecks: 28 comprobaciones; SQLite real y transacciones, correcciones y original, invalidación de informe, proceso hijo de prueba para el contrato CLI Whisper y cancelación, checkpoints de reanudación, exclusión de WAV abiertos, huecos temporales, lectura incremental de JSONL y tiempos de más de 24 horas, restricciones de Ollama local, análisis por lotes, caché, evidencia inválida, truncamiento y escape HTML.
+- CoreChecks: 31 comprobaciones; SQLite real y transacciones, correcciones y original, invalidación de informe, proceso hijo de prueba para el contrato CLI Whisper y cancelación, checkpoints de reanudación, exclusión de WAV abiertos, huecos temporales, lectura incremental de JSONL y tiempos de más de 24 horas, restricciones de Ollama local, análisis por lotes, caché, evidencia inválida, truncamiento y escape HTML.
 - La dependencia nativa SQLite se actualizó a 3.53.3; restauración sin la advertencia de vulnerabilidad de la biblioteca nativa anterior.
 - GitHub Actions incorpora compilación Windows, ambos grupos de pruebas, publicación autónoma, Inno Setup y prueba de instalación/render WPF/conversión de audio/desinstalación. Sus resultados finales están en la ejecución asociada al commit.
 - El modo WPF smoke genera vistas de Reunión y Ajustes sin ejecutar motores reales. Además convierte 61 s de audio sintético estéreo float 48 kHz a tres bloques PCM16 mono 16 kHz y comprueba silencio.
@@ -9,4 +9,6 @@
 - Pendiente en hardware Windows: captura simultánea, jack de 3.5 mm, desconexiones, latencia, sincronización/deriva, duración prolongada, calidad de transcripción y objetividad del informe con modelos reales. Consultar PRUEBA-WINDOWS.md.
 
 ## Paquete completo 0.4.0
-La compilación del paquete comprueba hashes oficiales y la presencia de los motores y modelos. Inicia Ollama real con qwen3:1.7b y solicita una respuesta corta para comprobar carga del modelo; esto no evalúa la calidad de un informe ejecutivo. La prueba de la aplicación instalada carga además el modelo Whisper real sobre un WAV sintético de silencio y verifica el API local incluido. Las grabaciones de reuniones reales y la evaluación de calidad se dejan para después, por instrucción del usuario.
+La compilación del paquete comprueba hashes oficiales y la presencia de los motores y modelos. Inicia Ollama real con qwen3:1.7b y solicita una respuesta corta para comprobar carga del modelo; esto no evalúa la calidad de un informe ejecutivo. La prueba de la aplicación instalada carga además el modelo Whisper real sobre un WAV sintético de 30 segundos y verifica el API local incluido. Las grabaciones de reuniones reales y la evaluación de calidad se dejan para después, por instrucción del usuario.
+
+Los timestamps de ventanas de inferencia Whisper de 30 s se recortan al audio real de un bloque corto. Se descartan segmentos que caigan enteramente en relleno; timestamps negativos o desordenados siguen produciendo un error visible.

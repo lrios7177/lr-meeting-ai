@@ -90,8 +90,8 @@ public partial class MainWindow : Window
                 settings.ValidateWhisper();
                 await localOllama.EnsureStartedAsync(settings,CancellationToken.None);
                 using var analyzer=new OllamaAnalyzer(settings);await analyzer.CheckAsync(CancellationToken.None);
-                var prepared=await new AudioPreparer().PrepareAsync(Path.Combine(dataRoot,"silence-check.wav"),Path.Combine(dataRoot,"conversion"),CancellationToken.None);
-                await new WhisperTranscriber().TranscribeAsync(prepared.Single(),settings,CancellationToken.None);
+                var prepared=await new AudioPreparer().PrepareAsync(Path.Combine(dataRoot,"conversion-check.wav"),Path.Combine(dataRoot,"conversion"),CancellationToken.None);
+                await new WhisperTranscriber().TranscribeAsync(prepared.First(),settings,CancellationToken.None);
             }
             if(Pages.SelectedIndex!=0||!MeetingTitle.IsVisible)throw new InvalidDataException("The meeting page is not visible on startup.");
             NavigateTo(1);await Task.Delay(100);if(!TranscriptGrid.IsVisible)throw new InvalidDataException("Transcription navigation failed.");

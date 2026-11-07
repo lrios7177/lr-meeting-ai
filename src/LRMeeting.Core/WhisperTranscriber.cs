@@ -44,9 +44,14 @@ public sealed class WhisperTranscriber : ITranscriber
                 var offsets = segment.GetProperty("offsets");
                 double from = offsets.GetProperty("from").GetDouble(), to = offsets.GetProperty("to").GetDouble();
                 var text = segment.GetProperty("text").GetString()?.Trim() ?? "";
-                if (!double.IsFinite(from) || !double.IsFinite(to) || from < 0 || to < from || to > chunk.DurationMs + 1500)
-                    throw new InvalidDataException("Whisper devolvió marcas de tiempo no válidas.");
-                if (text.Length != 0) result.Add(new(Math.Min(from, chunk.DurationMs), Math.Min(to, chunk.DurationMs), text));
+                // Whisper can timestamp its padded 30-second inference window even for a short final WAV.
+                // Never publish positions outside the real audio: clip the end and discard padded-only segments.
+                var paddedLimit = Math.Max(30000, Math.Ceiling(chunk.DurationMs / 30000) * 30000);
+                if (!double.IsFinite(from) || !double.IsFinite(to) || from < 0 || to < from || to > paddedLimit + 1500)
+                    throw new InvalidDataException($"Whisper devolvió marcas no válidas: {from}–{to} ms para {chunk.DurationMs} ms de audio.");
+                if (from >= chunk.DurationMs) continue;
+                var end = Math.Min(to, chunk.DurationMs);
+                if (text.Length != 0 && end > from) result.Add(new(from, end, text));
             }
             return result;
         }
