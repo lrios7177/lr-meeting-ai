@@ -4,16 +4,22 @@ namespace LRMeeting.Core;
 
 public sealed class MeetingPipeline(IMeetingStore store, IAudioPreparer preparer, ITranscriber transcriber)
 {
+    private readonly HashSet<string> completedSources=new(StringComparer.OrdinalIgnoreCase);
+    private CaptureTimeline? timeline;
+    private string? timelineMeeting;
     public event Action<TranscriptSegment>? SegmentAdded;
     public async Task TranscribeAsync(Meeting meeting, IReadOnlyList<AudioSource> sources, EngineSettings settings, IProgress<string>? progress, CancellationToken cancellationToken)
     {
         settings.ValidateWhisper();
-        var timeline = CaptureTimeline.Load(meeting.Folder, meeting.CreatedUtc);
+        if(timelineMeeting!=meeting.Id){timelineMeeting=meeting.Id;timeline=null;completedSources.Clear();}
+        bool refreshed=false;
         foreach (var source in sources)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var relative = Path.GetRelativePath(meeting.Folder, source.FilePath).Replace('\\', '/');
-            if (store.IsChunkDone(meeting.Id, relative, -1)) continue;
+            if(completedSources.Contains(relative))continue;
+            if(store.IsChunkDone(meeting.Id,relative,-1)){completedSources.Add(relative);continue;}
+            if(!refreshed){timeline??=new CaptureTimeline();timeline.Refresh(meeting.Folder,meeting.CreatedUtc);refreshed=true;}
             var chunks = await preparer.PrepareAsync(source.FilePath, Path.Combine(meeting.Folder, ".processing"), cancellationToken).ConfigureAwait(false);
             foreach (var chunk in chunks)
             {
@@ -26,7 +32,7 @@ public sealed class MeetingPipeline(IMeetingStore store, IAudioPreparer preparer
                 {
                     var key = meeting.Id + "|" + relative + "|" + chunk.Index + "|" + index;
                     var id = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(key)))[..16];
-                    var from = timeline.Map(source.FilePath, chunk.OffsetMs + part.StartMs);
+                    var from = timeline!.Map(source.FilePath, chunk.OffsetMs + part.StartMs);
                     var to = Math.Max(from, timeline.Map(source.FilePath, chunk.OffsetMs + part.EndMs));
                     segments.Add(new(id, meeting.Id, source.Channel, relative, from, to, part.Text.Trim()));
                 }
@@ -35,6 +41,7 @@ public sealed class MeetingPipeline(IMeetingStore store, IAudioPreparer preparer
                 foreach (var segment in segments) SegmentAdded?.Invoke(segment);
             }
             store.CommitChunk(meeting.Id, relative, -1, []);
+            completedSources.Add(relative);
         }
     }
     public static IReadOnlyList<AudioSource> DiscoverSources(string folder)

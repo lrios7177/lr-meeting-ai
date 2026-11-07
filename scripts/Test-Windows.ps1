@@ -9,7 +9,16 @@ $snapshot = Join-Path $root 'artifacts/smoke-meeting.png'
 $app = Start-Process (Join-Path $installDir 'LRMeetingAI.exe') -ArgumentList @('--smoke-test',('"' + $snapshot + '"')) -PassThru
 try {
     if (!$app.WaitForExit(90000)) { throw 'Windows UI smoke test exceeded 90 seconds.' }
-    if ($app.ExitCode -ne 0) { throw "Windows UI smoke test failed with code $($app.ExitCode)." }
+    if ($app.ExitCode -ne 0) {
+        $startupLog = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'LR Meeting AI/startup-error.log'
+        if (Test-Path $startupLog) {
+            Get-Content $startupLog | Write-Output
+            Copy-Item $startupLog (Join-Path $root 'artifacts/smoke-startup-error.txt')
+        }
+        $renderLog = Join-Path $root 'artifacts/smoke-data/smoke-error.log'
+        if (Test-Path $renderLog) { Get-Content $renderLog | Write-Output }
+        throw "Windows UI smoke test failed with code $($app.ExitCode)."
+    }
     if (!(Test-Path $snapshot)) { throw 'UI did not render a snapshot.' }
     if (!(Test-Path ([System.IO.Path]::ChangeExtension($snapshot, 'checks.txt')))) { throw 'Audio conversion checks did not finish.' }
 } finally {

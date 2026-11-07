@@ -78,6 +78,15 @@ try
     var timeline=CaptureTimeline.Load(timelineFolder,utc);
     Check(timeline.Map(Path.Combine(timelineFolder,"channel-A-000001.wav"),150)==5050,"Timeline preserves callback gaps instead of compressing silence");
 
+    var temporalFile=Path.Combine(timelineFolder,"channel-A-000001.wav");
+    var pendingLine="""{"type":"block","channel":"A","arrivalMs":9100,"bytes":3200,"blocks":[{"FileName":"channel-A-000001.wav","FileOffset":6400,"Bytes":3200,"SourceOffset":0}]}""";
+    File.AppendAllText(Path.Combine(timelineFolder,"capture.jsonl"),pendingLine[..40]);
+    timeline.Refresh(timelineFolder,utc);
+    File.AppendAllText(Path.Combine(timelineFolder,"capture.jsonl"),pendingLine[40..]+"\n");
+    timeline.Refresh(timelineFolder,utc);
+    Check(timeline.Map(temporalFile,250)==9050,"Incremental timeline retains an unfinished JSONL line across reads");
+    Check(MeetingTime.Format(25*3600*1000d)=="25:00:00","Meeting timestamps do not wrap after 24 hours");
+
     foreach(var url in new[]{"https://127.0.0.1:11434","http://example.com","http://127.0.0.1:11434/path"})
         await Throws<ArgumentException>(()=>{using var invalid=new OllamaAnalyzer(settings with{OllamaUrl=url});return Task.CompletedTask;},"Reject nonlocal or unexpected Ollama endpoint: "+url);
     await Throws<ArgumentException>(()=>{using var invalid=new OllamaAnalyzer(settings with{OllamaModel="model:cloud"});return Task.CompletedTask;},"Reject cloud model names");
