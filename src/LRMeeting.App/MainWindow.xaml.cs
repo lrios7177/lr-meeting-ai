@@ -65,7 +65,7 @@ public partial class MainWindow : Window
         }
         else RefreshDevices();
         timer.Tick+=Tick;timer.Start();Closing+=OnClosing;
-        UpdateControls();
+        UpdateControls();NavigateTo(0);
     }
     protected override async void OnContentRendered(EventArgs e)
     {
@@ -75,6 +75,11 @@ public partial class MainWindow : Window
         {
             await Task.Delay(700);
             await VerifyAudioPreparationAsync();
+            if(Pages.SelectedIndex!=0||!MeetingTitle.IsVisible)throw new InvalidDataException("The meeting page is not visible on startup.");
+            NavigateTo(1);await Task.Delay(100);if(!TranscriptGrid.IsVisible)throw new InvalidDataException("Transcription navigation failed.");
+            NavigateTo(2);await Task.Delay(100);if(!ReportSummary.IsVisible)throw new InvalidDataException("Report navigation failed.");
+            NavigateTo(3);await Task.Delay(100);if(!HistoryGrid.IsVisible)throw new InvalidDataException("History navigation failed.");
+            NavigateTo(0);await Task.Delay(200);
             var args=Environment.GetCommandLineArgs(); var path=Path.GetFullPath(args[Array.IndexOf(args,"--smoke-test")+1]);
             var bitmap=new RenderTargetBitmap((int)ActualWidth,(int)ActualHeight,96,96,PixelFormats.Pbgra32); bitmap.Render(this);
             var encoder=new PngBitmapEncoder();encoder.Frames.Add(BitmapFrame.Create(bitmap));
