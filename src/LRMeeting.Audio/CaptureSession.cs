@@ -52,7 +52,7 @@ public sealed class CaptureSession
         try
         {
             capture = loopback ? new WasapiLoopbackCapture(device) : new WasapiCapture(device);
-            writer = new RotatingWaveWriter(folder, name, capture.WaveFormat);
+            writer = new RotatingWaveWriter(folder, name, capture.WaveFormat, (long)capture.WaveFormat.AverageBytesPerSecond * 30);
             var c = new Channel(name, device, capture, writer);
             capture.DataAvailable += (_, e) => Receive(c, e);
             capture.RecordingStopped += (_, e) =>
@@ -61,7 +61,7 @@ public sealed class CaptureSession
                 else if (Volatile.Read(ref stopping) == 0) Report(name, new IOException("Captura detenida inesperadamente."));
                 c.Stopped.TrySetResult();
             };
-            Write(new { type = "format", channel = name, format = capture.WaveFormat.ToString() });
+            Write(new { type = "format", channel = name, format = capture.WaveFormat.ToString(), averageBytesPerSecond = capture.WaveFormat.AverageBytesPerSecond });
             channels.Add(c);
         }
         catch

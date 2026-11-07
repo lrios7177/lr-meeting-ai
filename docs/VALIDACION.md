@@ -1,9 +1,9 @@
-# Validación de desarrollo
-- SDK local: .NET 10.0.403, compilación cruzada desde Linux.
-- Versión 0.2.0: `dotnet build -c Release` correcto, cero advertencias y cero errores.
-- `dotnet run --project tests/LRMeeting.AudioChecks -c Release`: 10 grupos correctos: ocho comprobaciones del medidor, rotación WAV con reconstrucción exacta de muestras y offsets, y empaquetado con verificación de datos, cancelación y preservación de archivos existentes.
-- La prueba de rotación usa un límite reducido de 32 bytes de audio para cubrir varios cambios de archivo sin grabar gigabytes. No reemplaza la prueba de una reunión prolongada.
-- Primera ejecución Windows de GitHub Actions: correcta, compilación, pruebas de medidores, publicación autónoma e instalador Inno Setup generados. Ejecución: https://github.com/lrios7177/lr-meeting-ai/actions/runs/42398850602 (código inicial 0.1.0).
-- Los cambios 0.2.0 se verificarán mediante la siguiente ejecución de Actions al subirlos.
-- El runner compila y empaqueta: no demuestra instalación en un equipo de usuario, funcionamiento de WPF, captura WASAPI, sincronización ni estabilidad en hardware. Pendiente protocolo docs/PRUEBA-WINDOWS.md.
-- No hay integración IA ni pruebas de transcripción: se mantiene la puerta de captura solicitada.
+# Validación 0.3.0
+- Compilación local cruzada: .NET SDK 10.0.403, cero errores y cero advertencias.
+- AudioChecks: 10 grupos; niveles PCM/float, rotación WAV sin pérdida de muestras, offsets, empaquetado, cancelación y conservación de originales.
+- CoreChecks: 26 comprobaciones; SQLite real y transacciones, correcciones y original, invalidación de informe, proceso hijo de prueba para el contrato CLI Whisper y cancelación, checkpoints de reanudación, exclusión de WAV abiertos, huecos temporales, restricciones de Ollama local, análisis por lotes, caché, evidencia inválida, truncamiento y escape HTML.
+- La dependencia nativa SQLite se actualizó a 3.53.3; restauración sin la advertencia de vulnerabilidad de la biblioteca nativa anterior.
+- GitHub Actions incorpora compilación Windows, ambos grupos de pruebas, publicación autónoma, Inno Setup y prueba de instalación/render WPF/conversión de audio/desinstalación. Sus resultados finales están en la ejecución asociada al commit.
+- El modo WPF smoke genera vistas de Reunión y Ajustes sin ejecutar motores reales. Además convierte 61 s de audio sintético estéreo float 48 kHz a tres bloques PCM16 mono 16 kHz y comprueba silencio.
+- Las respuestas Ollama de CoreChecks son un transporte HTTP de prueba y el CLI Whisper es un proceso fixture. No son pruebas de calidad de un modelo real. No hay motores/modelos reales configurados en este entorno de desarrollo.
+- Pendiente en hardware Windows: captura simultánea, jack de 3.5 mm, desconexiones, latencia, sincronización/deriva, duración prolongada, calidad de transcripción y objetividad del informe con modelos reales. Consultar PRUEBA-WINDOWS.md.

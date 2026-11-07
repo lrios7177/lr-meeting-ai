@@ -72,8 +72,9 @@ try
         if (!copy.ToArray().SequenceEqual(audio)) throw new Exception("Archive changed the audio.");
     }
     var savedArchive = File.ReadAllBytes(archivePath);
-    try { await LRMeeting.Storage.MeetingArchive.CreateAsync(archiveFolder); throw new Exception("Existing archive overwritten."); }
-    catch (IOException) { }
+    var secondArchive = await LRMeeting.Storage.MeetingArchive.CreateAsync(archiveFolder);
+    if (secondArchive == archivePath) throw new Exception("Existing archive overwritten.");
+    File.Delete(secondArchive);
     if (!File.ReadAllBytes(archivePath).SequenceEqual(savedArchive) || !File.ReadAllBytes(Path.Combine(archiveFolder, "channel-A-000001.wav")).SequenceEqual(audio))
         throw new Exception("Existing archive or source audio damaged.");
     Console.WriteLine("PASS Meeting archive round trip, cancellation cleanup and preservation of originals");

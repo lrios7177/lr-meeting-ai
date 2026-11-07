@@ -19,6 +19,8 @@ jobs:
         run: dotnet build LRMeetingAI.sln -c Release
       - name: Verify audio meters
         run: dotnet run --project tests/LRMeeting.AudioChecks -c Release --no-build
+      - name: Verify persistence and AI pipeline
+        run: dotnet run --project tests/LRMeeting.CoreChecks -c Release --no-build
       - name: Install Inno Setup if needed
         shell: pwsh
         run: |
@@ -29,6 +31,19 @@ jobs:
       - name: Publish and build installer
         shell: pwsh
         run: ./scripts/Build-Windows.ps1
+      - name: Install and smoke test Windows application
+        shell: pwsh
+        run: ./scripts/Test-Windows.ps1
+      - name: Upload UI verification
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: LRMeetingAI-interface-preview
+          path: |
+            artifacts/smoke-*.png
+            artifacts/smoke-*.txt
+            artifacts/smoke-data/smoke-error.log
+          if-no-files-found: warn
       - name: Upload installer
         uses: actions/upload-artifact@v4
         with:

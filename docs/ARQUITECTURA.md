@@ -1,24 +1,28 @@
-# LR Meeting AI — arquitectura y alcance
+# Arquitectura 0.3.0
 Autor: Ing. Luis Ríos, MBA.
 
-## Primera entrega
-WPF y .NET 10; biblioteca independiente LRMeeting.Audio con NAudio/WASAPI. Dos fuentes elegidas explícitamente, WAV independiente, medidores, prueba de 30 segundos, reproducción individual, reloj monotónico común, registro JSONL, errores visibles y comprobación de disponibilidad cada dos segundos durante la captura. Las fuentes quedan fijas hasta detener la sesión: cambiar el dispositivo predeterminado de Windows no redirige la grabación.
+- **LRMeeting.App**: WPF, navegación, estados de reunión, selección de dispositivos, historial, correcciones, ajustes y orquestación. Una instancia por sesión de Windows impide que dos ventanas gestionen la misma base y archivos activos.
+- **LRMeeting.Audio**: NAudio y WASAPI, fuentes independientes, partes WAV alineadas a muestras, medidores, pruebas y conversión a PCM16 mono 16 kHz con resampling WDL. El callback no ejecuta IA; escribe WAV y JSONL. Sigue pendiente medir latencia real de disco y separar escritura en una cola si las pruebas de carga lo requieren.
+- **LRMeeting.Core**: contratos, pipeline con checkpoints, adaptador CLI Whisper.cpp, cliente Ollama estrictamente local, mapeo temporal por callbacks y exportación de informe HTML/JSON/TXT.
+- **LRMeeting.Storage**: SQLite con WAL, transacciones por bloque, originales inmutables, revisiones de texto, versiones de informes y empaquetado ZIP64. Esquema inicial identificado por user_version=1; futuras versiones requerirán migraciones explícitas.
 
-## Límite de validación
-Compilar no valida WASAPI. Este entorno Linux no ejecuta WPF ni prueba hardware de Windows. La implementación es inicial y debe pasar el protocolo de aceptación antes de integrar IA. No se incluye todavía Whisper, Ollama, SQLite, informe ejecutivo, exportación de actas, pausa/reanudación ni importación.
+## Ciclo de grabación
+Cada reunión usa su propia carpeta; cada pausa/reanudación crea una toma `take-NNNN`. Cada toma guarda A/B por separado y `capture.jsonl`. Las partes cierran al alcanzar 30 segundos de muestras; una salida silenciosa de WASAPI puede emitir menos datos, por lo que se trata de tiempo de audio, no de pared. Un marcador `.recording` mantiene el último archivo fuera del reconocimiento mientras esté abierto. Al detener se cierra el último WAV y se retira el marcador. La desconexión interrumpe visiblemente; no se redirige automáticamente a otro dispositivo.
 
-Las marcas de tiempo representan llegada de callbacks y el inicio de cada capturador, no el reloj del hardware. No garantizan sincronización de muestras ni compensación de deriva. Loopback puede omitir buffers durante el silencio: el WAV puede tener una duración menor que el tiempo de pared; capture.jsonl conserva tiempos de llegada y offsets. Antes de transcribir será necesario reconstruir una línea temporal por canal, insertar silencios y validar deriva durante una reunión prolongada. El callback escribe a disco: medir latencia y desarrollar una cola acotada con consumidor dedicado antes de usar en producción. Los WAV rotan automáticamente a 1 GiB por parte, alineados a muestras; el registro identifica archivo, offset y posición dentro del callback. No hay límite fijo de tiempo de sesión. El empaquetado usa ZIP64 cuando corresponde y requiere espacio adicional porque conserva los originales. Falta medir estabilidad en hardware para reuniones prolongadas. Un cierre forzado del proceso puede dejar un WAV sin finalizar. Las grabaciones contienen información sensible y no se cifran en esta versión.
+Un bucle de trabajo independiente descubre archivos cerrados y transcribe. Al terminar se procesan los pendientes y después Ollama genera el informe, si está activado. Cancelar IA mata el subproceso activo cuando corresponde y conserva los checkpoints. En caso de error o cierre de la app, Historial permite reanudar. No se reparan automáticamente WAV dañados por una terminación abrupta.
 
-## Módulos siguientes (diseñados, no implementados)
-- Core: Meeting, AudioTrack, TranscriptSegment con SourceChannel y tiempos absolutos; TranscriptRevision mantiene texto original y correcciones.
-- Transcription: adaptador a proceso whisper.cpp local, modelos español/inglés, cola persistente independiente del grabador; bloques con solapamiento y reconciliación por tiempos/texto para evitar duplicados. Si se retrasa, acumula trabajo en disco.
-- Intelligence: cliente HTTP limitado a Ollama local, salida estructurada validada, referencias a segmentos como evidencia, responsables desconocidos cuando no exista evidencia. El texto transcrito es dato, no instrucciones. Modelos y licencias se seleccionarán antes de distribuir.
-- Persistence: SQLite con migraciones, WAL, reuniones, pistas, segmentos originales, revisiones, trabajos y resultados de análisis. Escrituras incrementales transaccionales y recuperación de trabajos interrumpidos.
-- Export: servicios de exportación independientes de WPF, con revisión humana del acta.
+## Transcripción
+Los archivos se convierten en bloques PCM de 30 segundos sin cargar toda la reunión en memoria. Se conserva una caché local que verifica tamaño y fecha del audio fuente. Los bloques no tienen solapamiento, por lo que no se crean duplicaciones por ventanas superpuestas; los IDs y transacciones evitan duplicar al reintentar. Una palabra o frase en el límite puede reconocerse peor. No se aplica una eliminación heurística de frases iguales que podría borrar repeticiones legítimas.
 
-## Distribución
-Publicación autónoma win-x64, incluye runtime .NET; Inno Setup 6 crea instalador por usuario sin administrador. No se incluyen modelos ni Ollama en esta etapa. Revisar licencias de dependencias y modelos, avisos legales, firma Authenticode y política de actualización antes de venta. La autoría no constituye una licencia comercial de terceros.
-Windows 11 x64 con soporte vigente es la opción preferida. Windows 10 22H2 se admite técnicamente, pero su soporte general finalizó el 14/10/2025: usar solo si cuenta con cobertura vigente aplicable. El instalador no comprueba ESU. La versión mínima no implica soporte comercial del sistema.
+El proceso Whisper usa ArgumentList, lee stdout/stderr simultáneamente, tiene cancelación y timeout por bloque y valida timestamps del JSON. Se preservan origen, canal, posición y texto original. Los segmentos corregidos quedan en revisiones; un informe previo se marca desactualizado. A/B son canales, no una identificación biométrica de personas.
 
-## Archivo de reunión
-LRMeeting.Storage es independiente de WPF y WASAPI. Genera un paquete ZIP con las partes WAV, capture.jsonl y meeting.json (schemaVersion 1). Se escribe primero a un temporal; solo se publica la ruta final al completar. Cancelación o error eliminan el temporal y conservan la grabación. No incluye transcripción ni informe todavía. No implementa importación de paquetes en esta entrega.
+## Tiempo y sincronización
+La captura registra tasa de bytes, offset en parte WAV, offset dentro del callback y llegada monotónica. El mapeo conserva pausas y huecos de callbacks en la transcripción. No son timestamps de muestras de hardware; no hay compensación de deriva. Para importación sin log se usa la línea temporal del archivo. Los logs antiguos sin tasas numéricas tienen límites adicionales y deben revisarse. No se promete sincronización perfecta.
+
+## Ollama e informe
+HTTP exclusivamente a localhost/127.0.0.1/::1, sin proxy ni redirecciones. Modelos cloud y metadatos remotos se rechazan. Las instrucciones separan explícitamente la transcripción como dato; no se ejecutan acciones a partir de contenido transcrito.
+
+Los segmentos se agrupan según presupuesto de texto y se analizan por lotes. Cada afirmación estructurada exige evidencia con IDs presentes en su lote. El resumen ejecutivo se reduce jerárquicamente y el resto de puntos detallados se conserva. Los resultados por lote se guardan en caché por hash de modelo, endpoint y contenido, lo que permite reintentar y cambiar texto sin reutilizar notas incorrectas. No se publica salida truncada como informe completo. La referencia valida procedencia, no interpretación semántica: el borrador requiere revisión humana.
+
+## Distribución y estado de aceptación
+.NET autónomo win-x64 e Inno Setup por usuario; Whisper, Ollama y modelos son instalaciones separadas. GitHub Actions prueba instalación, arranque/render WPF, conversión de audio y desinstalación. Las pruebas de contratos IA usan fixtures controlados. La captura real y la calidad con modelos reales siguen pendientes de aceptación. A solicitud expresa del usuario se avanzó con IA mientras se mantiene visible esa condición pendiente.
