@@ -13,3 +13,6 @@ Registrar versión de Windows, hardware, versión de app, fecha, dispositivos y 
 10. Probar 60 minutos con pulsos comunes de referencia al comienzo y al final; medir offsets y deriva. La sincronización inicial es aproximada: registrar desviación antes de decidir el tratamiento para IA.
 
 Conservar capture.jsonl y diagnostics.log junto con el resultado. Revisar privacidad antes de compartirlos. Estado inicial de todos los casos: PENDIENTE, no probado en Windows.
+
+11. Grabar hasta superar 1 GiB por canal: verificar rotación sin pérdidas ni duplicaciones y reproducción consecutiva de todas las partes. Esta prueba debe completarse en Windows antes de anunciar soporte probado de reuniones largas.
+12. Guardar el paquete único y abrirlo con una herramienta ZIP64 compatible. Comprobar canales, partes, capture.jsonl y meeting.json. Simular poco espacio al empaquetar: debe conservar los WAV originales y no dejar un paquete final incompleto.

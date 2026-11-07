@@ -4,6 +4,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Threading;
 using LRMeeting.Audio;
+using LRMeeting.Storage;
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
 namespace LRMeeting.App;
@@ -19,6 +20,7 @@ public partial class MainWindow : Window
     private float peakA, peakB;
     private WaveOutEvent? player;
     private AudioFileReader? reader;
+    private int playbackVersion;
     public MainWindow()
     {
         InitializeComponent();
@@ -66,7 +68,7 @@ public partial class MainWindow : Window
         try
         {
             peakA = peakB = 0;
-            PlayA.IsEnabled = PlayB.IsEnabled = false;
+            PlayA.IsEnabled = PlayB.IsEnabled = Archive.IsEnabled = false;
             var folder = Path.Combine(root, DateTime.Now.ToString("yyyyMMdd-HHmmss") + "-" + Guid.NewGuid().ToString("N")[..8]);
             var next = new CaptureSession(folder);
             next.Level += (channel, peak) => { if (channel == "A") Volatile.Write(ref peakA, peak); else Volatile.Write(ref peakB, peak); };
@@ -103,8 +105,9 @@ public partial class MainWindow : Window
             var warnings = await current.StopAsync();
             foreach (var warning in warnings) Note(warning);
             Status.Text = warnings.Count == 0 ? "Grabación guardada. Escucha y verifica ambos canales." : "Grabación guardada con advertencias; revisa el registro y escucha ambos canales.";
-            PlayA.IsEnabled = File.Exists(Path.Combine(current.Folder, "channel-A.wav"));
-            PlayB.IsEnabled = File.Exists(Path.Combine(current.Folder, "channel-B.wav"));
+            PlayA.IsEnabled = AudioParts(current.Folder, "A").Length != 0;
+            PlayB.IsEnabled = AudioParts(current.Folder, "B").Length != 0;
+            Archive.IsEnabled = PlayA.IsEnabled || PlayB.IsEnabled;
         }
         catch (Exception ex) { Error(ex); }
         finally
@@ -133,19 +136,56 @@ public partial class MainWindow : Window
         }
         catch (Exception ex) { Error(ex); await EndAsync(); }
     }
+    private static string[] AudioParts(string folder, string channel) => Directory.GetFiles(folder, $"channel-{channel}*.wav").Order(StringComparer.Ordinal).ToArray();
     private void Play(string channel)
     {
-        if (session != null || lastFolder == null) return;
+        if (session != null || lastFolder == null || busy) return;
+        StopPlayback();
+        var parts = AudioParts(lastFolder, channel);
+        Note($"Reproduciendo canal {channel}: {parts.Length} parte(s), por la salida predeterminada de Windows.");
+        PlayPart(parts, 0, playbackVersion);
+    }
+    private void PlayPart(string[] parts, int index, int version)
+    {
+        if (version != playbackVersion || index >= parts.Length) return;
         try
         {
-            StopPlayback();
-            reader = new AudioFileReader(Path.Combine(lastFolder, $"channel-{channel}.wav"));
-            player = new WaveOutEvent(); player.Init(reader); player.Play();
-            Note($"Reproduciendo canal {channel} por la salida predeterminada de Windows.");
+            reader = new AudioFileReader(parts[index]);
+            var output = new WaveOutEvent();
+            player = output;
+            output.Init(reader);
+            output.PlaybackStopped += (_, args) => Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (version != playbackVersion || player != output) return;
+                player = null; output.Dispose(); reader?.Dispose(); reader = null;
+                if (args.Exception != null) { Error(args.Exception); return; }
+                PlayPart(parts, index + 1, version);
+            }));
+            output.Play();
         }
         catch (Exception ex) { StopPlayback(); Error(ex); }
     }
-    private void StopPlayback() { player?.Stop(); player?.Dispose(); player = null; reader?.Dispose(); reader = null; }
+    private void StopPlayback()
+    {
+        playbackVersion++;
+        player?.Stop(); player?.Dispose(); player = null;
+        reader?.Dispose(); reader = null;
+    }
+    private async void ArchiveClick(object sender, RoutedEventArgs e)
+    {
+        if (busy || session != null || lastFolder == null) return;
+        busy = true; Archive.IsEnabled = false; StopPlayback();
+        SetControls(false); Stop.IsEnabled = false;
+        try
+        {
+            var progress = new Progress<double>(value => Status.Text = $"Guardando archivo de reunión: {value:P0}. Se conservan los WAV originales.");
+            var path = await MeetingArchive.CreateAsync(lastFolder, progress);
+            Status.Text = "Archivo único guardado. Incluye ambos canales y sus marcas de tiempo.";
+            Note("Reunión guardada: " + path);
+        }
+        catch (Exception ex) { Error(ex); }
+        finally { busy = false; SetControls(true); Archive.IsEnabled = true; }
+    }
     private async void TestClick(object sender, RoutedEventArgs e) => await StartAsync(true);
     private async void RecordClick(object sender, RoutedEventArgs e) => await StartAsync(false);
     private async void StopClick(object sender, RoutedEventArgs e) => await EndAsync();

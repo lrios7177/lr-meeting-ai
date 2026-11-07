@@ -9,7 +9,7 @@
 <TextBlock Text="Para probar: reproduce una conversación por la salida elegida y habla al micrófono. Usa audífonos para reducir el eco." TextWrapping="Wrap" Margin="0,0,0,18"/>
 <WrapPanel><Button x:Name="Refresh" Content="Actualizar dispositivos" Click="RefreshClick"/><Button x:Name="Test" Content="Prueba de 30 segundos" Click="TestClick"/><Button x:Name="Record" Content="Grabar sesión" Click="RecordClick"/><Button x:Name="Stop" Content="Detener" Click="StopClick" IsEnabled="False"/></WrapPanel>
 <TextBlock x:Name="Status" Text="Selecciona ambos dispositivos para comenzar." TextWrapping="Wrap" Margin="0,12" FontSize="16"/>
-<WrapPanel><Button x:Name="PlayA" Content="Escuchar A" Click="PlayAClick" IsEnabled="False"/><Button x:Name="PlayB" Content="Escuchar B" Click="PlayBClick" IsEnabled="False"/><Button Content="Detener reproducción" Click="StopPlaybackClick"/><Button Content="Abrir grabaciones" Click="OpenFolderClick"/></WrapPanel>
+<WrapPanel><Button x:Name="PlayA" Content="Escuchar A" Click="PlayAClick" IsEnabled="False"/><Button x:Name="PlayB" Content="Escuchar B" Click="PlayBClick" IsEnabled="False"/><Button Content="Detener reproducción" Click="StopPlaybackClick"/><Button x:Name="Archive" Content="Guardar reunión en un archivo" Click="ArchiveClick" IsEnabled="False"/><Button Content="Abrir grabaciones" Click="OpenFolderClick"/></WrapPanel>
 <TextBox x:Name="Messages" IsReadOnly="True" TextWrapping="Wrap" Height="150" VerticalScrollBarVisibility="Auto" Background="#1B2940" Foreground="#E0E7F0"/>
 <TextBlock Text="IA pendiente de validación de captura en Windows. Las grabaciones se guardan localmente." TextWrapping="Wrap" Foreground="#B5C3D8" Margin="0,16,0,0"/>
 </StackPanel></ScrollViewer></Window>

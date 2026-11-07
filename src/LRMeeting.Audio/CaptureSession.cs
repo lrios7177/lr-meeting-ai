@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Collections.Concurrent;
 using System.Text.Json;
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
@@ -13,6 +14,7 @@ public sealed class CaptureSession
     private readonly string folder;
     private StreamWriter? log;
     private int stopping;
+    private readonly ConcurrentQueue<string> errors = new();
     public event Action<string, float>? Level;
     public event Action<string>? Fault;
     public string Folder => folder;
@@ -38,7 +40,7 @@ public sealed class CaptureSession
         }
         catch (Exception ex)
         {
-            Write(new { type = "start-error", error = ex.ToString() });
+            Report("inicio", ex);
             await StopAsync();
             throw;
         }
@@ -46,13 +48,12 @@ public sealed class CaptureSession
     private void Add(string name, MMDevice device, bool loopback)
     {
         WasapiCapture? capture = null;
-        WaveFileWriter? writer = null;
+        RotatingWaveWriter? writer = null;
         try
         {
             capture = loopback ? new WasapiLoopbackCapture(device) : new WasapiCapture(device);
-            writer = new WaveFileWriter(Path.Combine(folder, $"channel-{name}.wav"), capture.WaveFormat);
+            writer = new RotatingWaveWriter(folder, name, capture.WaveFormat);
             var c = new Channel(name, device, capture, writer);
-            channels.Add(c);
             capture.DataAvailable += (_, e) => Receive(c, e);
             capture.RecordingStopped += (_, e) =>
             {
@@ -61,8 +62,15 @@ public sealed class CaptureSession
                 c.Stopped.TrySetResult();
             };
             Write(new { type = "format", channel = name, format = capture.WaveFormat.ToString() });
+            channels.Add(c);
         }
-        catch { writer?.Dispose(); capture?.Dispose(); device.Dispose(); throw; }
+        catch
+        {
+            Cleanup(name, () => writer?.Dispose());
+            Cleanup(name, () => capture?.Dispose());
+            Cleanup(name, device.Dispose);
+            throw;
+        }
     }
     private void Receive(Channel c, WaveInEventArgs e)
     {
@@ -71,15 +79,11 @@ public sealed class CaptureSession
             lock (c.Gate)
             {
                 if (c.Closed) return;
-                // Classic WAV has a 4 GiB limit: fail explicitly before corrupting it.
-                if (c.Writer.Length + e.BytesRecorded > uint.MaxValue - 1024L)
-                    throw new IOException("Límite WAV alcanzado; detenga la sesión y comience otra.");
-                var offset = c.Writer.Length;
-                c.Writer.Write(e.Buffer, 0, e.BytesRecorded);
+                var blocks = c.Writer.Write(e.Buffer, e.BytesRecorded);
                 var peak = AudioLevels.Peak(e.Buffer, e.BytesRecorded, c.Capture.WaveFormat);
                 if (peak > 0.001f) c.HeardAudio = true;
                 Write(new { type = "block", channel = c.Name, arrivalMs = clock.Elapsed.TotalMilliseconds,
-                    fileOffset = offset, bytes = e.BytesRecorded, peak });
+                    blocks, bytes = e.BytesRecorded, peak });
                 Level?.Invoke(c.Name, peak);
             }
         }
@@ -87,8 +91,16 @@ public sealed class CaptureSession
     }
     private void Report(string name, Exception ex)
     {
-        Write(new { type = "error", channel = name, elapsedMs = clock.Elapsed.TotalMilliseconds, error = ex.ToString() });
-        Fault?.Invoke($"Canal {name}: {ex.Message}");
+        var message = $"Canal {name}: {ex.Message}";
+        try { Write(new { type = "error", channel = name, elapsedMs = clock.Elapsed.TotalMilliseconds, error = ex.ToString() }); }
+        catch (Exception logError) { message += $" No se pudo escribir el registro: {logError.Message}"; }
+        errors.Enqueue(message);
+        Fault?.Invoke(message);
+    }
+    private void Cleanup(string name, Action action)
+    {
+        try { action(); }
+        catch (Exception ex) { Report(name, ex); }
     }
     private void Write(object value)
     {
@@ -114,22 +126,29 @@ public sealed class CaptureSession
             lock (c.Gate)
             {
                 c.Closed = true;
-                c.Writer.Dispose();
+                Cleanup(c.Name, c.Writer.Dispose);
             }
-            c.Capture.Dispose(); c.Device.Dispose();
+            Cleanup(c.Name, c.Capture.Dispose);
+            Cleanup(c.Name, c.Device.Dispose);
             if (!c.HeardAudio) warnings.Add($"Canal {c.Name}: no se detectó audio audible. Puede ser silencio normal; repita hablando o reproduciendo sonido.");
-            Write(new { type = "channel-end", channel = c.Name, c.StartMilliseconds, c.HeardAudio });
+            Cleanup(c.Name, () => Write(new { type = "channel-end", channel = c.Name, c.StartMilliseconds, c.HeardAudio, bytes = c.Writer.Length, parts = c.Writer.PartCount }));
         }
         clock.Stop();
-        lock (logLock) { log?.Dispose(); log = null; }
+        lock (logLock)
+        {
+            var closingLog = log;
+            log = null;
+            Cleanup("registro", () => closingLog?.Dispose());
+        }
+        warnings.AddRange(errors.Distinct());
         return warnings;
     }
-    private sealed class Channel(string name, MMDevice device, WasapiCapture capture, WaveFileWriter writer)
+    private sealed class Channel(string name, MMDevice device, WasapiCapture capture, RotatingWaveWriter writer)
     {
         public string Name = name;
         public MMDevice Device = device;
         public WasapiCapture Capture = capture;
-        public WaveFileWriter Writer = writer;
+        public RotatingWaveWriter Writer = writer;
         public object Gate = new();
         public TaskCompletionSource Stopped = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public bool HeardAudio, Started, Closed;

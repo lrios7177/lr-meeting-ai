@@ -1,4 +1,4 @@
-#define AppVersion "0.1.0"
+#define AppVersion "0.2.0"
 [Setup]
 AppId={{707E61AF-6732-41AB-A8A6-5822454D8367}
 AppName=LR Meeting AI
