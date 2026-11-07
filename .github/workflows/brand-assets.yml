@@ -14,6 +14,8 @@ jobs:
           mkdir reference
           curl --fail --location --max-time 30 https://narssus.com/ -o reference/index.html
           curl --fail --location --max-time 30 https://narssus.com/wp-content/themes/narssus-vision/assets/symbol.svg -o reference/symbol.svg
+          curl --fail --location --max-time 30 https://narssus.com/wp-content/uploads/2026/10/Sin-titulo-1.png -o reference/narssus-logo.png
+          curl --fail --location --max-time 30 https://narssus.com/wp-content/themes/narssus-vision/assets/style.css -o reference/style.css
       - uses: actions/upload-artifact@v4
         with:
           name: narssus-original-reference
