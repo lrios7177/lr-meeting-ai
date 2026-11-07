@@ -9,7 +9,7 @@ permissions:
 jobs:
   build:
     runs-on: windows-2025
-    timeout-minutes: 20
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -30,7 +30,7 @@ jobs:
           }
       - name: Publish and build installer
         shell: pwsh
-        run: ./scripts/Build-Windows.ps1
+        run: ./scripts/Build-Windows.ps1 -IncludeAI
       - name: Install and smoke test Windows application
         shell: pwsh
         run: ./scripts/Test-Windows.ps1
@@ -48,11 +48,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: LRMeetingAI-installer-win-x64
-          path: artifacts/installer/*.exe
-          if-no-files-found: error
-      - name: Upload portable application
-        uses: actions/upload-artifact@v4
-        with:
-          name: LRMeetingAI-portable-win-x64
-          path: artifacts/publish/
+          path: artifacts/installer/*
+          compression-level: 0
+          retention-days: 7
           if-no-files-found: error

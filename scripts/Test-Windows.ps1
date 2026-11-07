@@ -8,7 +8,7 @@ if ($install.ExitCode -ne 0) { throw "Installer exited with code $($install.Exit
 $snapshot = Join-Path $root 'artifacts/smoke-meeting.png'
 $app = Start-Process (Join-Path $installDir 'LRMeetingAI.exe') -ArgumentList @('--smoke-test',('"' + $snapshot + '"')) -PassThru
 try {
-    if (!$app.WaitForExit(90000)) { throw 'Windows UI smoke test exceeded 90 seconds.' }
+    if (!$app.WaitForExit(180000)) { throw 'Windows UI smoke test exceeded 180 seconds.' }
     if ($app.ExitCode -ne 0) {
         $startupLog = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'LR Meeting AI/startup-error.log'
         if (Test-Path $startupLog) {

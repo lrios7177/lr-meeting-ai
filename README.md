@@ -1,4 +1,4 @@
-# LR Meeting AI — 0.3.0
+# LR Meeting AI — 0.4.0
 **Ing. Luis Ríos, MBA** · Windows x64 · C# / WPF / .NET 10
 
 Aplicación de escritorio para grabar reuniones, transcribir con Whisper.cpp local y generar un informe ejecutivo con Ollama local. No utiliza servicios externos de transcripción ni APIs de pago. Es una versión de desarrollo: la calidad y estabilidad con hardware y modelos reales deben validarse en el equipo de destino.
@@ -15,18 +15,21 @@ Aplicación de escritorio para grabar reuniones, transcribir con Whisper.cpp loc
 - Informe HTML moderno, JSON y transcripción TXT/JSON. El navegador permite imprimir o guardar PDF. Paquete `.lrmeeting.zip` con ambos canales, tiempos y resultados disponibles; ZIP64 para tamaños grandes.
 
 ## Instalar la aplicación
-En GitHub abre **Actions → Windows build and installer**, selecciona una ejecución satisfactoria y descarga **LRMeetingAI-installer-win-x64** desde **Artifacts**. Descomprime y ejecuta el `.exe`. El runtime .NET va incluido. También existe un paquete portátil con todos los archivos necesarios.
+En GitHub abre **Actions → Windows build and installer**, selecciona una ejecución satisfactoria y descarga **LRMeetingAI-installer-win-x64** desde **Artifacts**. Descomprime y ejecuta el `.exe`. El runtime .NET va incluido. El ZIP del instalador completo contiene el ejecutable y sus archivos de datos; no ejecutes solo el EXE sin extraer los demás.
 
-El instalador no incluye Whisper.cpp, modelos ni Ollama. No tiene firma Authenticode. La publicación comercial requiere validar el equipo objetivo y preparar firma/actualizaciones; revisa `docs/THIRD-PARTY-NOTICES.md`.
+La edición completa incluye Whisper.cpp b5454 para CPU, su modelo base multilingüe, Ollama 0.40.15, qwen3:1.7b y las DLL de Visual C++ necesarias. No requiere descargas de IA al instalar ni durante el uso. Extrae **todos** los archivos del ZIP en la misma carpeta y ejecuta el instalador `.exe`; conserva junto a él los archivos `.bin` de datos del instalador. No tiene firma Authenticode. La publicación comercial requiere validar el equipo objetivo y preparar firma/actualizaciones; revisa `docs/THIRD-PARTY-NOTICES.md`.
 
-## Primera configuración
-1. Instala Ollama para Windows desde https://ollama.com/download/windows y ejecuta `ollama pull qwen3:4b`, o instala otro modelo local compatible con salida JSON estructurada. El tamaño y la velocidad dependen del modelo y del hardware. Evita variantes cloud.
-2. Descarga una compilación Windows x64 de **whisper.cpp** desde https://github.com/ggml-org/whisper.cpp/releases. Conserva sus DLL junto a `whisper-cli.exe`.
-3. Obtén un modelo **multilingüe** de Whisper compatible con whisper.cpp, por ejemplo `ggml-base.bin` o `ggml-small.bin`, siguiendo la documentación oficial de whisper.cpp. Los modelos `.en` son solo para inglés. La aplicación no descarga archivos automáticamente.
-4. En **Ajustes**, selecciona el ejecutable y el modelo `.bin`, el idioma y el nombre exacto del modelo Ollama instalado. Mantén `http://127.0.0.1:11434` si usas la configuración normal.
-5. Guarda y pulsa **Comprobar configuración y Ollama**. Esto comprueba archivos presentes y `/api/show` de Ollama, no la calidad del reconocimiento. La primera transcripción verifica la compatibilidad del CLI con `-oj`.
+## Primera configuración — edición completa
+Las rutas de los motores y modelos incluidos se detectan automáticamente. Ollama arranca cuando hace falta en `127.0.0.1:11435`, usa el modelo incluido y se detiene al cerrar la app. No necesita instalar un servicio global ni modificar un Ollama que ya tengas.
 
-Las descargas iniciales necesitan Internet; una vez instalados los motores y modelos, la app usa archivos locales y HTTP loopback. El adaptador no acepta servidores Ollama externos ni redirecciones; rechaza modelos identificados como remotos en sus metadatos.
+1. Instala la edición completa y abre la aplicación.
+2. Selecciona salida y micrófono y realiza la prueba de audio.
+3. En Ajustes puedes pulsar **Comprobar configuración y Ollama**. Si conservas ajustes antiguos, pulsa **Usar motores incluidos**.
+4. Graba la reunión y pulsa Terminar para generar la transcripción e informe local.
+
+El perfil incluido usa CPU y un modelo de informes ligero, qwen3:1.7b. La velocidad depende del equipo; 8 GB de RAM es una orientación inicial, y 16 GB deja más margen. El tamaño final del instalador depende de sus modelos y puede superar 1 GB. Reserva espacio para aplicación, modelos, temporales y grabaciones. No se garantiza ejecución en cualquier CPU o cantidad de memoria.
+
+Si prefieres motores propios, la configuración manual sigue disponible: whisper-cli y un modelo multilingüe .bin; Ollama con un modelo local y dirección HTTP loopback. Los motores incluidos no usan variantes cloud.
 
 ## Reunión e informe automático
 Selecciona los dispositivos, realiza la prueba de 30 segundos y escucha A y B por separado. Con audífonos de 3.5 mm elige el endpoint de reproducción que realmente usa Windows; no se necesita «Stereo Mix».
@@ -50,8 +53,13 @@ dotnet build LRMeetingAI.sln -c Release
 dotnet run --project tests/LRMeeting.AudioChecks -c Release
 dotnet run --project tests/LRMeeting.CoreChecks -c Release
 dotnet run --project src/LRMeeting.App
-powershell -ExecutionPolicy Bypass -File scripts/Build-Windows.ps1
+powershell -ExecutionPolicy Bypass -File scripts/Build-Windows.ps1 -IncludeAI
 ```
 Requiere SDK .NET 10 e Inno Setup 6 para generar el instalador. GitHub Actions compila, ejecuta pruebas de audio/persistencia/contratos IA, construye e instala el `.exe`, abre y renderiza WPF en modo de prueba y verifica conversión de audio. El artefacto **LRMeetingAI-interface-preview** contiene capturas de la interfaz sin grabar ni simular resultados de modelos reales.
 
 Las pruebas automatizadas usan un proceso Whisper de prueba y respuestas HTTP de Ollama controladas para verificar el contrato y los fallos; no demuestran calidad de modelos reales ni captura de hardware. Sigue `docs/PRUEBA-WINDOWS.md` para la aceptación en equipo real.
+
+## Construir el paquete completo
+`Prepare-Engines.ps1` descarga versiones fijadas de motores desde sus releases oficiales, verifica SHA256, obtiene el modelo Whisper desde una revisión inmutable y verifica el SHA256 LFS publicado. Ollama descarga y valida sus blobs de modelo; el manifiesto registra el digest del modelo. El paquete conserva licencias de motores y modelos. Se excluyen bibliotecas GPU del perfil CPU para reducir tamaño.
+
+La compilación del paquete completo necesita Internet, varios GB de espacio temporal y un entorno Windows con Visual Studio/CRT redistribuible (como el runner usado por GitHub Actions). Después, el equipo de destino puede instalar y procesar reuniones sin conexión. La edición completa conserva los datos del usuario al desinstalar, como la edición anterior. El artefacto grande se conserva siete días en Actions; puede reconstruirse con una nueva ejecución.

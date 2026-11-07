@@ -1,4 +1,4 @@
-# Arquitectura 0.3.0
+# Arquitectura 0.4.0
 Autor: Ing. Luis Ríos, MBA.
 
 - **LRMeeting.App**: WPF, navegación, estados de reunión, selección de dispositivos, historial, correcciones, ajustes y orquestación. Una instancia por sesión de Windows impide que dos ventanas gestionen la misma base y archivos activos.
@@ -25,4 +25,4 @@ HTTP exclusivamente a localhost/127.0.0.1/::1, sin proxy ni redirecciones. Model
 Los segmentos se agrupan según presupuesto de texto y se analizan por lotes. Cada afirmación estructurada exige evidencia con IDs presentes en su lote. El resumen ejecutivo se reduce jerárquicamente y el resto de puntos detallados se conserva. Los resultados por lote se guardan en caché por hash de modelo, endpoint y contenido, lo que permite reintentar y cambiar texto sin reutilizar notas incorrectas. No se publica salida truncada como informe completo. La referencia valida procedencia, no interpretación semántica: el borrador requiere revisión humana.
 
 ## Distribución y estado de aceptación
-.NET autónomo win-x64 e Inno Setup por usuario; Whisper, Ollama y modelos son instalaciones separadas. GitHub Actions prueba instalación, arranque/render WPF, conversión de audio y desinstalación. Las pruebas de contratos IA usan fixtures controlados. La captura real y la calidad con modelos reales siguen pendientes de aceptación. A solicitud expresa del usuario se avanzó con IA mientras se mantiene visible esa condición pendiente.
+.NET autónomo win-x64 e Inno Setup por usuario; La edición completa incorpora Whisper/Ollama y modelos bajo AI, junto a CRT app-local. LocalOllamaHost inicia un servidor privado loopback en 11435 con el almacén de modelos incluido, deshabilita cloud y GPU para el perfil CPU y detiene solo el proceso de su propiedad. Configuraciones externas previas se conservan hasta elegir «Usar motores incluidos». GitHub Actions prueba instalación, arranque/render WPF, conversión de audio y desinstalación. Las pruebas de contratos IA usan fixtures controlados. La captura real y la calidad con modelos reales siguen pendientes de aceptación. A solicitud expresa del usuario se avanzó con IA mientras se mantiene visible esa condición pendiente.

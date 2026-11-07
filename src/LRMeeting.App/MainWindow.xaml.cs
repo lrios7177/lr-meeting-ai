@@ -21,6 +21,7 @@ public partial class MainWindow : Window
     private readonly string dataRoot;
     private readonly string root;
     private readonly MeetingStore store;
+    private readonly LocalOllamaHost localOllama;
     private readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromMilliseconds(250) };
     private readonly ObservableCollection<SegmentRow> rows = [];
     private readonly Stopwatch elapsed = new();
@@ -46,6 +47,7 @@ public partial class MainWindow : Window
             : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"LR Meeting AI");
         root=Path.Combine(dataRoot,"Recordings"); Directory.CreateDirectory(root);
         store=new MeetingStore(Path.Combine(dataRoot,"meetings.db"));
+        localOllama=new LocalOllamaHost(dataRoot);
         TranscriptGrid.ItemsSource=rows;
         try
         {
@@ -53,6 +55,14 @@ public partial class MainWindow : Window
             if(File.Exists(path)) settings=JsonSerializer.Deserialize<EngineSettings>(File.ReadAllText(path),JsonDefaults.Options) ?? new();
         }
         catch(Exception ex) { Error(ex); }
+        try
+        {
+            if(!File.Exists(settings.WhisperExecutable)||!File.Exists(settings.WhisperModel))
+            {
+                var included=LocalOllamaHost.BundledSettings();
+                if(included!=null){settings=included with{Language=settings.Language,AutoProcess=settings.AutoProcess};EngineBadge.Text="● Motores y modelos incluidos · CPU";}
+            }
+        }catch(Exception ex){Error(ex);}
         WhisperPath.Text=settings.WhisperExecutable; ModelPath.Text=settings.WhisperModel;
         LanguageChoice.SelectedIndex=settings.Language=="en" ? 1:0; OllamaUrl.Text=settings.OllamaUrl;
         OllamaModel.Text=settings.OllamaModel; AutoProcess.IsChecked=settings.AutoProcess;
@@ -75,6 +85,14 @@ public partial class MainWindow : Window
         {
             await Task.Delay(700);
             await VerifyAudioPreparationAsync();
+            if(LocalOllamaHost.Available)
+            {
+                settings.ValidateWhisper();
+                await localOllama.EnsureStartedAsync(settings,CancellationToken.None);
+                using var analyzer=new OllamaAnalyzer(settings);await analyzer.CheckAsync(CancellationToken.None);
+                var prepared=await new AudioPreparer().PrepareAsync(Path.Combine(dataRoot,"silence-check.wav"),Path.Combine(dataRoot,"conversion"),CancellationToken.None);
+                await new WhisperTranscriber().TranscribeAsync(prepared.Single(),settings,CancellationToken.None);
+            }
             if(Pages.SelectedIndex!=0||!MeetingTitle.IsVisible)throw new InvalidDataException("The meeting page is not visible on startup.");
             NavigateTo(1);await Task.Delay(100);if(!TranscriptGrid.IsVisible)throw new InvalidDataException("Transcription navigation failed.");
             NavigateTo(2);await Task.Delay(100);if(!ReportSummary.IsVisible)throw new InvalidDataException("Report navigation failed.");
@@ -89,7 +107,7 @@ public partial class MainWindow : Window
             var settingsEncoder=new PngBitmapEncoder();settingsEncoder.Frames.Add(BitmapFrame.Create(settingsBitmap));
             using(var output=File.Create(Path.ChangeExtension(path,"settings.png")))settingsEncoder.Save(output);
             File.WriteAllText(Path.ChangeExtension(path,"checks.txt"),"WPF opened and rendered; SQLite native runtime loaded; audio conversion and silence detection passed.");
-            closing=true;Close();
+            Close();
         }
         catch(Exception ex){File.WriteAllText(Path.Combine(dataRoot,"smoke-error.log"),ex.ToString());Application.Current.Shutdown(1);}
     }
@@ -316,6 +334,8 @@ public partial class MainWindow : Window
             await Task.Run(()=>pipeline.TranscribeAsync(meeting,MeetingPipeline.DiscoverSources(meeting.Folder),config,progress,token),token);
             RefreshTranscript();
             store.SaveMeeting(meeting with{State="Analizando",Error=null});
+            SetStatus("Iniciando Ollama local incluido…");
+            await localOllama.EnsureStartedAsync(config,token);
             using var ollama=new OllamaAnalyzer(config);
             var segments=store.GetSegments(meeting.Id);
             var report=await ollama.AnalyzeAsync(meeting,segments,progress,token);
@@ -451,13 +471,23 @@ public partial class MainWindow : Window
         if(busy||meetingActive)return;busy=true;UpdateControls();
         try
         {
-            await SaveSettingsAsync();settings.ValidateWhisper();using var ollama=new OllamaAnalyzer(settings);
+            await SaveSettingsAsync();settings.ValidateWhisper();
+            await localOllama.EnsureStartedAsync(settings,CancellationToken.None);
+            using var ollama=new OllamaAnalyzer(settings);
             EngineStatus.Text="Comprobando Ollama local…";
             await ollama.CheckAsync(CancellationToken.None);
             EngineStatus.Text="Archivos de Whisper presentes y modelo de Ollama local disponible. La primera transcripción verificará la compatibilidad del ejecutable.";
             EngineBadge.Text="● Ollama local disponible";
         }catch(Exception ex){EngineStatus.Text=ex.Message;throw;}
         finally{busy=false;UpdateControls();}
+    });
+    private async void UseBundledClick(object sender,RoutedEventArgs e)=>await Guard(async()=>
+    {
+        if(busy||meetingActive)return;
+        var included=LocalOllamaHost.BundledSettings()??throw new InvalidOperationException("Instala la edición completa para usar los motores incluidos.");
+        settings=included;WhisperPath.Text=included.WhisperExecutable;ModelPath.Text=included.WhisperModel;
+        OllamaUrl.Text=included.OllamaUrl;OllamaModel.Text=included.OllamaModel;LanguageChoice.SelectedIndex=0;
+        await SaveSettingsAsync();EngineStatus.Text="Motores incluidos seleccionados. No necesitas descargas adicionales.";
     });
     private async void SaveSettingsClick(object sender,RoutedEventArgs e)=>await Guard(async()=>{await SaveSettingsAsync();EngineStatus.Text="Ajustes guardados. Comprueba la configuración antes de procesar.";});
     private void BrowseWhisperClick(object sender,RoutedEventArgs e){var dialog=new OpenFileDialog{Filter="Whisper CLI|*.exe"};if(dialog.ShowDialog()==true)WhisperPath.Text=dialog.FileName;}
@@ -485,7 +515,7 @@ public partial class MainWindow : Window
             processing?.Cancel();var auto=settings.AutoProcess;settings=settings with{AutoProcess=false};
             await Guard(()=>EndAsync());settings=settings with{AutoProcess=auto};
         }
-        StopPlayback();timer.Stop();processing?.Cancel();closing=true;Close();
+        StopPlayback();timer.Stop();processing?.Cancel();localOllama.Dispose();closing=true;_ = Dispatcher.BeginInvoke(new Action(Close));
     }
     public sealed class SegmentRow(TranscriptSegment segment)
     {

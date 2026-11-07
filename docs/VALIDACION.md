@@ -1,4 +1,4 @@
-# Validación 0.3.0
+# Validación 0.4.0
 - Compilación local cruzada: .NET SDK 10.0.403, cero errores y cero advertencias.
 - AudioChecks: 10 grupos; niveles PCM/float, rotación WAV sin pérdida de muestras, offsets, empaquetado, cancelación y conservación de originales.
 - CoreChecks: 28 comprobaciones; SQLite real y transacciones, correcciones y original, invalidación de informe, proceso hijo de prueba para el contrato CLI Whisper y cancelación, checkpoints de reanudación, exclusión de WAV abiertos, huecos temporales, lectura incremental de JSONL y tiempos de más de 24 horas, restricciones de Ollama local, análisis por lotes, caché, evidencia inválida, truncamiento y escape HTML.
@@ -7,3 +7,6 @@
 - El modo WPF smoke genera vistas de Reunión y Ajustes sin ejecutar motores reales. Además convierte 61 s de audio sintético estéreo float 48 kHz a tres bloques PCM16 mono 16 kHz y comprueba silencio.
 - Las respuestas Ollama de CoreChecks son un transporte HTTP de prueba y el CLI Whisper es un proceso fixture. No son pruebas de calidad de un modelo real. No hay motores/modelos reales configurados en este entorno de desarrollo.
 - Pendiente en hardware Windows: captura simultánea, jack de 3.5 mm, desconexiones, latencia, sincronización/deriva, duración prolongada, calidad de transcripción y objetividad del informe con modelos reales. Consultar PRUEBA-WINDOWS.md.
+
+## Paquete completo 0.4.0
+La compilación del paquete comprueba hashes oficiales y la presencia de los motores y modelos. Inicia Ollama real con qwen3:1.7b y solicita una respuesta corta para comprobar carga del modelo; esto no evalúa la calidad de un informe ejecutivo. La prueba de la aplicación instalada carga además el modelo Whisper real sobre un WAV sintético de silencio y verifica el API local incluido. Las grabaciones de reuniones reales y la evaluación de calidad se dejan para después, por instrucción del usuario.
