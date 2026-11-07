@@ -1,0 +1,15 @@
+<Window x:Class="LRMeeting.App.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="LR Meeting AI · Prueba de captura" Width="850" Height="720" MinWidth="680" MinHeight="650" Background="#101827" Foreground="#F0F4FA">
+<Window.Resources><Style TargetType="Button"><Setter Property="Padding" Value="16,10"/><Setter Property="Margin" Value="0,0,10,10"/></Style><Style TargetType="ComboBox"><Setter Property="Margin" Value="0,8,0,12"/><Setter Property="Padding" Value="8"/></Style></Window.Resources>
+<ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="32">
+<TextBlock Text="LR Meeting AI" FontSize="30" FontWeight="Bold"/><TextBlock Text="Ing. Luis Ríos, MBA · Audio local · Etapa 1" Margin="0,8,0,24" Foreground="#B5C3D8"/>
+<TextBlock Text="A · Participantes — salida de Windows (WASAPI Loopback)"/><ComboBox x:Name="Outputs"/>
+<ProgressBar x:Name="LevelA" Maximum="1" Height="12" Margin="0,0,0,20"/>
+<TextBlock Text="B · Tu voz — micrófono"/><ComboBox x:Name="Inputs"/>
+<ProgressBar x:Name="LevelB" Maximum="1" Height="12" Margin="0,0,0,20"/>
+<TextBlock Text="Para probar: reproduce una conversación por la salida elegida y habla al micrófono. Usa audífonos para reducir el eco." TextWrapping="Wrap" Margin="0,0,0,18"/>
+<WrapPanel><Button x:Name="Refresh" Content="Actualizar dispositivos" Click="RefreshClick"/><Button x:Name="Test" Content="Prueba de 30 segundos" Click="TestClick"/><Button x:Name="Record" Content="Grabar sesión" Click="RecordClick"/><Button x:Name="Stop" Content="Detener" Click="StopClick" IsEnabled="False"/></WrapPanel>
+<TextBlock x:Name="Status" Text="Selecciona ambos dispositivos para comenzar." TextWrapping="Wrap" Margin="0,12" FontSize="16"/>
+<WrapPanel><Button x:Name="PlayA" Content="Escuchar A" Click="PlayAClick" IsEnabled="False"/><Button x:Name="PlayB" Content="Escuchar B" Click="PlayBClick" IsEnabled="False"/><Button Content="Detener reproducción" Click="StopPlaybackClick"/><Button Content="Abrir grabaciones" Click="OpenFolderClick"/></WrapPanel>
+<TextBox x:Name="Messages" IsReadOnly="True" TextWrapping="Wrap" Height="150" VerticalScrollBarVisibility="Auto" Background="#1B2940" Foreground="#E0E7F0"/>
+<TextBlock Text="IA pendiente de validación de captura en Windows. Las grabaciones se guardan localmente." TextWrapping="Wrap" Foreground="#B5C3D8" Margin="0,16,0,0"/>
+</StackPanel></ScrollViewer></Window>
