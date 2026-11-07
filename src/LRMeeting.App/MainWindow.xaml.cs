@@ -32,7 +32,9 @@ public partial class MainWindow : Window
     private Task? liveTask;
     private volatile bool meetingActive;
     private string? outputId,inputId;
-    private bool testMode,busy,closing,loadingHistory;
+    private bool testMode,busy,closing,loadingHistory,closeRequested,checkingOllama;
+    private DateTime nextOllamaCheck=DateTime.MinValue;
+    private readonly CancellationTokenSource lifetime=new();
     private int poll,take;
     private float peakA,peakB;
     private WaveOutEvent? player;
@@ -80,10 +82,21 @@ public partial class MainWindow : Window
     protected override async void OnContentRendered(EventArgs e)
     {
         base.OnContentRendered(e);
-        if(!smoke) return;
+        if(!smoke){await ProbeOllamaAsync(startBundled:true);return;}
         try
         {
             await Task.Delay(700);
+            MinimizeWindow.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            if(WindowState!=WindowState.Minimized)throw new InvalidDataException("Minimize button did not minimize the window.");
+            WindowState=WindowState.Normal;
+            MaximizeWindow.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            if(WindowState!=WindowState.Maximized)throw new InvalidDataException("Maximize button failed.");
+            MaximizeWindow.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            if(WindowState!=WindowState.Normal)throw new InvalidDataException("Restore button failed.");
+            VoiceA.Push(0.65);VoiceB.Push(0.35);
+            SetOllamaState(true,"Ollama · en línea");
+            if(EngineBadge.Text!="Ollama · en línea")throw new InvalidDataException("Ollama status display failed.");
+            SetOllamaState(false,"Ollama · sin verificar");
             await VerifyAudioPreparationAsync();
             if(LocalOllamaHost.Available)
             {
@@ -106,8 +119,11 @@ public partial class MainWindow : Window
             var settingsBitmap=new RenderTargetBitmap((int)ActualWidth,(int)ActualHeight,96,96,PixelFormats.Pbgra32);settingsBitmap.Render(this);
             var settingsEncoder=new PngBitmapEncoder();settingsEncoder.Frames.Add(BitmapFrame.Create(settingsBitmap));
             using(var output=File.Create(Path.ChangeExtension(path,"settings.png")))settingsEncoder.Save(output);
-            File.WriteAllText(Path.ChangeExtension(path,"checks.txt"),"WPF opened and rendered; SQLite native runtime loaded; audio conversion and silence detection passed.");
-            Close();
+            File.WriteAllText(Path.ChangeExtension(path,"checks.txt"),"WPF opened and rendered; minimize/maximize/restore and deferred close passed; Ollama indicator states passed; SQLite native runtime loaded; audio conversion and silence detection passed.");
+            busy=true;
+            CloseWindow.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            if(!closeRequested||closing)throw new InvalidDataException("Busy close was not queued safely.");
+            busy=false;Close();
         }
         catch(Exception ex){File.WriteAllText(Path.Combine(dataRoot,"smoke-error.log"),ex.ToString());Application.Current.Shutdown(1);}
     }
@@ -186,7 +202,7 @@ public partial class MainWindow : Window
     };
     private async Task SaveSettingsAsync()
     {
-        settings=ReadSettings();
+        settings=ReadSettings();nextOllamaCheck=DateTime.MinValue;SetOllamaState(false,"Ollama · comprobando");
         await ReportExporter.AtomicWriteAsync(Path.Combine(dataRoot,"settings.json"),JsonSerializer.Serialize(settings,JsonDefaults.Options),CancellationToken.None);
     }
     private void UpdateControls()
@@ -382,6 +398,11 @@ public partial class MainWindow : Window
     }
     private async void Tick(object? sender,EventArgs e)
     {
+        if(closeRequested&&!busy){Close();return;}
+        if(!smoke&&DateTime.UtcNow>=nextOllamaCheck&&!checkingOllama) _=ProbeOllamaAsync();
+        var a=meetingActive&&session!=null?Volatile.Read(ref peakA):0;
+        var b=meetingActive&&session!=null?Volatile.Read(ref peakB):0;
+        VoiceA.Push(a);VoiceB.Push(b);LevelA.Value=a;LevelB.Value=b;
         if(!meetingActive||busy)return;
         Clock.Text=MeetingTime.Format(elapsed.Elapsed.TotalMilliseconds);
         LevelA.Value=Volatile.Read(ref peakA);LevelB.Value=Volatile.Read(ref peakB);
@@ -477,8 +498,8 @@ public partial class MainWindow : Window
             EngineStatus.Text="Comprobando Ollama local…";
             await ollama.CheckAsync(CancellationToken.None);
             EngineStatus.Text="Archivos de Whisper presentes y modelo de Ollama local disponible. La primera transcripción verificará la compatibilidad del ejecutable.";
-            EngineBadge.Text="● Ollama local disponible";
-        }catch(Exception ex){EngineStatus.Text=ex.Message;throw;}
+            SetOllamaState(true,"Ollama · en línea");
+        }catch(Exception ex){EngineStatus.Text=ex.Message;SetOllamaState(false,"Ollama · sin verificar");throw;}
         finally{busy=false;UpdateControls();}
     });
     private async void UseBundledClick(object sender,RoutedEventArgs e)=>await Guard(async()=>
@@ -505,17 +526,59 @@ public partial class MainWindow : Window
     private void PlayBClick(object sender,RoutedEventArgs e)=>Play("B");
     private void StopPlaybackClick(object sender,RoutedEventArgs e)=>StopPlayback();
     private void OpenFolderClick(object sender,RoutedEventArgs e){Directory.CreateDirectory(root);OpenUrl(selected?.Folder??root);}
+    private void MinimizeWindowClick(object sender,RoutedEventArgs e)=>WindowState=WindowState.Minimized;
+    private void MaximizeWindowClick(object sender,RoutedEventArgs e)=>WindowState=WindowState==WindowState.Maximized?WindowState.Normal:WindowState.Maximized;
+    private void CloseWindowClick(object sender,RoutedEventArgs e)=>Close();
+    private void SetOllamaState(bool online,string message)
+    {
+        var color=(Color)ColorConverter.ConvertFromString(online?"#51F5AB":"#F0BD62");
+        OllamaLight.Fill=new SolidColorBrush(color);
+        OllamaLight.Effect=new System.Windows.Media.Effects.DropShadowEffect{Color=color,BlurRadius=18,ShadowDepth=0,Opacity=0.9};
+        EngineBadge.Text=message;EngineBadge.Foreground=new SolidColorBrush(color);
+        OllamaLight.ToolTip=online?$"Modelo local disponible: {settings.OllamaModel}":"Servidor desconectado o modelo no disponible. Revisa Ajustes.";
+    }
+    private async Task ProbeOllamaAsync(bool startBundled=false)
+    {
+        if(checkingOllama||closing||closeRequested)return;
+        checkingOllama=true;
+        var config=settings;
+        try
+        {
+            using var timeout=CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+            timeout.CancelAfter(TimeSpan.FromSeconds(startBundled?45:5));
+            if(startBundled)await localOllama.EnsureStartedAsync(config,timeout.Token);
+            using var analyzer=new OllamaAnalyzer(config);
+            await analyzer.CheckAsync(timeout.Token);
+            if(!closing&&config==settings)SetOllamaState(true,"Ollama · en línea");
+        }
+        catch(OperationCanceledException)when(lifetime.IsCancellationRequested) { }
+        catch(Exception ex)
+        {
+            if(!closing&&config==settings){SetOllamaState(false,"Ollama · desconectado");OllamaLight.ToolTip=ex.Message;}
+        }
+        finally{checkingOllama=false;nextOllamaCheck=DateTime.UtcNow.AddSeconds(10);}
+    }
     private async void OnClosing(object? sender,CancelEventArgs e)
     {
         if(closing)return;e.Cancel=true;
-        if(busy){SetStatus("Cancela o espera el procesamiento antes de cerrar.");return;}
-        if(meetingActive)
+        if(closeRequested&&busy)return;
+        closeRequested=true;processing?.Cancel();lifetime.Cancel();
+        if(busy){SetStatus("Cerrando: cancelando el procesamiento y conservando el audio…");return;}
+        busy=true;
+        try
         {
-            // Closing saves capture and checkpoints; lengthy analysis can be resumed from History.
-            processing?.Cancel();var auto=settings.AutoProcess;settings=settings with{AutoProcess=false};
-            await Guard(()=>EndAsync());settings=settings with{AutoProcess=auto};
+            if(meetingActive)
+            {
+                busy=false;var auto=settings.AutoProcess;settings=settings with{AutoProcess=false};
+                try{await EndAsync();}finally{settings=settings with{AutoProcess=auto};busy=true;}
+            }
+            // Let an in-flight health check release the host before disposing it.
+            while(checkingOllama)await Task.Delay(50);
+            StopPlayback();timer.Stop();localOllama.Dispose();closing=true;
+            _=Dispatcher.BeginInvoke(new Action(Close));
         }
-        StopPlayback();timer.Stop();processing?.Cancel();localOllama.Dispose();closing=true;_ = Dispatcher.BeginInvoke(new Action(Close));
+        catch(Exception ex){closeRequested=false;Error(ex);}
+        finally{busy=false;}
     }
     public sealed class SegmentRow(TranscriptSegment segment)
     {
