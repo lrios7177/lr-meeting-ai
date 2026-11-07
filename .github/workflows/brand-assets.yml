@@ -1,0 +1,21 @@
+name: Official narssus brand reference
+on:
+  push:
+    branches: [codex/narssus-original-assets]
+    paths: [.github/workflows/brand-assets.yml]
+permissions:
+  contents: read
+jobs:
+  reference:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download public original assets
+        run: |
+          mkdir reference
+          curl --fail --location --max-time 30 https://narssus.com/ -o reference/index.html
+          curl --fail --location --max-time 30 https://narssus.com/wp-content/themes/narssus-vision/assets/symbol.svg -o reference/symbol.svg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: narssus-original-reference
+          path: reference/
+          retention-days: 7
