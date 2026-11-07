@@ -22,7 +22,7 @@ Expand-Archive $whisperZip $expandedWhisper -Force
 $whisperDir = Join-Path $Destination 'whisper'
 New-Item $whisperDir -ItemType Directory -Force | Out-Null
 Copy-Item (Join-Path $expandedWhisper 'Release/whisper-cli.exe') $whisperDir -Force
-Copy-Item (Join-Path $expandedWhisper 'Release/*.dll') $whisperDir -Force
+Get-ChildItem (Join-Path $expandedWhisper 'Release') -Filter '*.dll' | Where-Object { $_.Name -eq 'whisper.dll' -or $_.Name -like 'ggml*.dll' } | Copy-Item -Destination $whisperDir -Force
 
 # Use the published model's immutable repository revision and advertised LFS SHA256.
 $metadata = Invoke-RestMethod 'https://huggingface.co/api/models/ggerganov/whisper.cpp?blobs=true'
@@ -59,6 +59,13 @@ $crt = Get-ChildItem (Join-Path $vs 'VC/Redist/MSVC') -Directory | Sort-Object N
 if (!$crt) { throw 'Visual C++ app-local runtime was not found in the build environment.' }
 Copy-Item (Join-Path $crt '*.dll') $whisperDir -Force
 Copy-Item (Join-Path $crt '*.dll') $ollamaExe.DirectoryName -Force
+$openmp = Get-ChildItem (Join-Path $vs 'VC/Redist/MSVC') -Directory | Sort-Object Name -Descending | ForEach-Object { Get-ChildItem (Join-Path $_.FullName 'x64') -Directory -Filter 'Microsoft.VC*.OpenMP' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName } | Select-Object -First 1
+if (!$openmp) { throw 'The redistributable Visual C++ OpenMP runtime is missing.' }
+Copy-Item (Join-Path $openmp '*.dll') $whisperDir -Force
+Copy-Item (Join-Path $openmp '*.dll') $ollamaExe.DirectoryName -Force
+foreach ($required in @('msvcp140.dll','vcruntime140.dll','vcruntime140_1.dll','vcomp140.dll')) {
+    if (!(Test-Path (Join-Path $whisperDir $required))) { throw "A required app-local DLL is missing: $required" }
+}
 
 $models = Join-Path $modelDir 'ollama'
 $variables = @('OLLAMA_HOST','OLLAMA_MODELS','OLLAMA_NO_CLOUD','CUDA_VISIBLE_DEVICES','OLLAMA_VULKAN')
