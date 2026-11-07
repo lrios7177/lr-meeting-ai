@@ -493,10 +493,10 @@ public partial class MainWindow : Window
         try
         {
             await SaveSettingsAsync();settings.ValidateWhisper();
-            await localOllama.EnsureStartedAsync(settings,CancellationToken.None);
+            await localOllama.EnsureStartedAsync(settings,lifetime.Token);
             using var ollama=new OllamaAnalyzer(settings);
             EngineStatus.Text="Comprobando Ollama local…";
-            await ollama.CheckAsync(CancellationToken.None);
+            await ollama.CheckAsync(lifetime.Token);
             EngineStatus.Text="Archivos de Whisper presentes y modelo de Ollama local disponible. La primera transcripción verificará la compatibilidad del ejecutable.";
             SetOllamaState(true,"Ollama · en línea");
         }catch(Exception ex){EngineStatus.Text=ex.Message;SetOllamaState(false,"Ollama · sin verificar");throw;}
