@@ -111,6 +111,10 @@ public partial class MainWindow : Window
             NavigateTo(2);await Task.Delay(100);if(!ReportSummary.IsVisible)throw new InvalidDataException("Report navigation failed.");
             NavigateTo(3);await Task.Delay(100);if(!HistoryGrid.IsVisible)throw new InvalidDataException("History navigation failed.");
             NavigateTo(0);await Task.Delay(200);
+            var source=BrandLogo.Source as BitmapSource;
+            if(source==null||source.PixelWidth<64)throw new InvalidDataException("The original logo did not load from the application resources.");
+            // Seed sample amplitudes only for the explicitly labelled UI smoke preview.
+            for(int i=0;i<64;i++){VoiceA.Push(0.08+Math.Abs(Math.Sin(i*0.71))*0.68);VoiceB.Push(0.03+Math.Abs(Math.Cos(i*0.43))*0.46);}
             var args=Environment.GetCommandLineArgs(); var path=Path.GetFullPath(args[Array.IndexOf(args,"--smoke-test")+1]);
             var bitmap=new RenderTargetBitmap((int)ActualWidth,(int)ActualHeight,96,96,PixelFormats.Pbgra32); bitmap.Render(this);
             var encoder=new PngBitmapEncoder();encoder.Frames.Add(BitmapFrame.Create(bitmap));
@@ -119,7 +123,7 @@ public partial class MainWindow : Window
             var settingsBitmap=new RenderTargetBitmap((int)ActualWidth,(int)ActualHeight,96,96,PixelFormats.Pbgra32);settingsBitmap.Render(this);
             var settingsEncoder=new PngBitmapEncoder();settingsEncoder.Frames.Add(BitmapFrame.Create(settingsBitmap));
             using(var output=File.Create(Path.ChangeExtension(path,"settings.png")))settingsEncoder.Save(output);
-            File.WriteAllText(Path.ChangeExtension(path,"checks.txt"),"WPF opened and rendered; minimize/maximize/restore and deferred close passed; Ollama indicator states passed; SQLite native runtime loaded; audio conversion and silence detection passed.");
+            File.WriteAllText(Path.ChangeExtension(path,"checks.txt"),"WPF opened and rendered; original brand resource loaded; minimize/maximize/restore and deferred close passed; Ollama indicator states passed; SQLite native runtime loaded; audio conversion and silence detection passed.");
             busy=true;
             CloseWindow.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             if(!closeRequested||closing)throw new InvalidDataException("Busy close was not queued safely.");
@@ -141,7 +145,7 @@ public partial class MainWindow : Window
     {
         Pages.SelectedIndex=index;
         new[]{Nav0,Nav1,Nav2,Nav3,Nav4}[index].IsChecked=true;
-        PageTitle.Text=new[]{"Tu próxima reunión, más clara.","Una conversación que puedes revisar.","Decisiones listas para avanzar.","La memoria de tus reuniones.","Configura tu espacio local."}[index];
+        PageTitle.Text=new[]{"Dale espacio a la conversación.","Una conversación que puedes revisar.","Decisiones listas para avanzar.","La memoria de tus reuniones.","Configura tu espacio local."}[index];
     }
     private void NavigateClick(object sender,RoutedEventArgs e)
     {
