@@ -44,6 +44,13 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        // Keep the real Windows caption inside the work area, including at 125/150% display scaling.
+        var workArea=SystemParameters.WorkArea;
+        if(workArea.Width>0&&workArea.Height>0)
+        {
+            MinWidth=Math.Min(MinWidth,workArea.Width);MinHeight=Math.Min(MinHeight,workArea.Height);
+            Width=Math.Min(Width,workArea.Width);Height=Math.Min(Height,workArea.Height);
+        }
         var args=Environment.GetCommandLineArgs();
         dataRoot=smoke ? Path.Combine(Path.GetDirectoryName(Path.GetFullPath(args[Array.IndexOf(args,"--smoke-test")+1]))!,"smoke-data")
             : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"LR Meeting AI");
@@ -86,14 +93,14 @@ public partial class MainWindow : Window
         try
         {
             await Task.Delay(700);
-            NativeCaptionSmoke.VerifyHitTests(this);
-            NativeCaptionSmoke.Post(this,NativeCaptionSmoke.Minimize);
+            NativeCaptionSmoke.VerifyNativeStyles(this);
+            await NativeCaptionSmoke.InvokeAsync(this,"Minimize");
             await Task.Delay(250);
             if(WindowState!=WindowState.Minimized)throw new InvalidDataException("Native minimize command failed.");
             NativeCaptionSmoke.Post(this,NativeCaptionSmoke.Restore);await Task.Delay(250);
-            NativeCaptionSmoke.Post(this,NativeCaptionSmoke.Maximize);await Task.Delay(250);
+            await NativeCaptionSmoke.InvokeAsync(this,"Maximize");await Task.Delay(250);
             if(WindowState!=WindowState.Maximized)throw new InvalidDataException("Native maximize command failed.");
-            NativeCaptionSmoke.Post(this,NativeCaptionSmoke.Restore);await Task.Delay(250);
+            await NativeCaptionSmoke.InvokeAsync(this,"Restore");await Task.Delay(250);
             if(WindowState!=WindowState.Normal)throw new InvalidDataException("Native restore command failed.");
             VoiceA.Push(0.65);VoiceB.Push(0.35);
             SetOllamaState(true,"Ollama · en línea");
@@ -125,11 +132,11 @@ public partial class MainWindow : Window
             var settingsBitmap=new RenderTargetBitmap((int)ActualWidth,(int)ActualHeight,96,96,PixelFormats.Pbgra32);settingsBitmap.Render(this);
             var settingsEncoder=new PngBitmapEncoder();settingsEncoder.Frames.Add(BitmapFrame.Create(settingsBitmap));
             using(var output=File.Create(Path.ChangeExtension(path,"settings.png")))settingsEncoder.Save(output);
-            File.WriteAllText(Path.ChangeExtension(path,"checks.txt"),"WPF opened and rendered; original brand resource loaded; native caption pointer hit-tests and system minimize/maximize/restore passed; Ollama indicator states passed; SQLite native runtime loaded; audio conversion and silence detection passed.");
+            File.WriteAllText(Path.ChangeExtension(path,"checks.txt"),"WPF opened and rendered; original brand resource loaded; native Windows caption automation minimize/maximize/restore passed; Ollama indicator states passed; SQLite native runtime loaded; audio conversion and silence detection passed.");
             busy=true;
-            NativeCaptionSmoke.Post(this,NativeCaptionSmoke.Close);await Task.Delay(100);
+            await NativeCaptionSmoke.InvokeAsync(this,"Close");await Task.Delay(100);
             if(!closeRequested||closing)throw new InvalidDataException("Busy close was not queued safely.");
-            File.AppendAllText(Path.ChangeExtension(path,"checks.txt")," Native close through WM_SYSCOMMAND safely deferred while busy.");
+            File.AppendAllText(Path.ChangeExtension(path,"checks.txt")," Native Windows Close caption button safely deferred while busy.");
             busy=false;NativeCaptionSmoke.Post(this,NativeCaptionSmoke.Close);
         }
         catch(Exception ex){File.WriteAllText(Path.Combine(dataRoot,"smoke-error.log"),ex.ToString());Application.Current.Shutdown(1);}
