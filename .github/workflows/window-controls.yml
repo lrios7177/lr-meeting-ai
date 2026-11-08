@@ -1,0 +1,43 @@
+name: Native window controls
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/LRMeeting.App/**'
+      - '.github/workflows/window-controls.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  caption:
+    runs-on: windows-2025
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Publish application without bundled models for focused window testing
+        run: dotnet publish src/LRMeeting.App/LRMeeting.App.csproj -c Release -r win-x64 --self-contained true -o artifacts/window-app
+      - name: Test native caption and safe close
+        shell: pwsh
+        run: |
+          $snapshot = Join-Path $PWD 'artifacts/caption.png'
+          $app = Start-Process (Join-Path $PWD 'artifacts/window-app/LRMeetingAI.exe') -ArgumentList @('--smoke-test',('"' + $snapshot + '"')) -PassThru
+          try {
+            if (!$app.WaitForExit(90000)) { throw 'Window checks timed out.' }
+            if ($app.ExitCode -ne 0) {
+              $errorFile = Join-Path $PWD 'artifacts/smoke-data/smoke-error.log'
+              if (Test-Path $errorFile) { Get-Content $errorFile }
+              throw "Window checks exited with code $($app.ExitCode)."
+            }
+            Get-Content ([System.IO.Path]::ChangeExtension($snapshot,'checks.txt'))
+          } finally { if (!$app.HasExited) { Stop-Process -Id $app.Id -Force } }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: LRMeetingAI-native-window-checks
+          path: |
+            artifacts/caption*.png
+            artifacts/caption*.txt
+            artifacts/smoke-data/smoke-error.log

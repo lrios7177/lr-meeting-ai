@@ -25,6 +25,9 @@ internal static class NativeCaptionSmoke
     private static extern nint GetTitleBar(nint handle,uint message,nint parameter,ref TitleBarInfo info);
     [DllImport("user32.dll",EntryPoint="SendMessageW")]
     private static extern nint SendMessage(nint handle,uint message,nint parameter,nint point);
+    [DllImport("dwmapi.dll")]
+    [return:MarshalAs(UnmanagedType.Bool)]
+    private static extern bool DwmDefWindowProc(nint handle,uint message,nint parameter,nint point,out nint result);
     [DllImport("user32.dll",EntryPoint="PostMessageW",SetLastError=true)]
     [return:MarshalAs(UnmanagedType.Bool)]
     private static extern bool PostMessage(nint handle,uint message,nint command,nint parameter);
@@ -44,7 +47,10 @@ internal static class NativeCaptionSmoke
                 throw new InvalidDataException($"Native caption button {index} has no clickable bounds.");
             int x=(bounds.Left+bounds.Right)/2,y=(bounds.Top+bounds.Bottom)/2;
             var point=unchecked((nint)((y<<16)|(x&0xFFFF)));
-            int actual=(int)SendMessage(handle,0x0084,0,point); // WM_NCHITTEST
+            // DWM owns the standard caption buttons. Direct SendMessage alone bypasses
+            // its hit-test path and can return HTCAPTION even over a real caption button.
+            int actual=DwmDefWindowProc(handle,0x0084,0,point,out var dwmHit)
+                ? (int)dwmHit : (int)SendMessage(handle,0x0084,0,point); // WM_NCHITTEST
             if(actual!=expected)throw new InvalidDataException($"Caption hit-test {index}: expected {expected}, received {actual}.");
         }
     }
